@@ -36,9 +36,17 @@ const pendingRequests = {};
 io.on('connection', (socket) => {
     console.log(`[Server] New connection: ${socket.id}`);
 
+    const updateRoomCount = (meetingId) => {
+        const clients = io.sockets.adapter.rooms.get(meetingId);
+        const count = clients ? clients.size : 0;
+        io.to(meetingId).emit('room-occupancy', { count });
+        console.log(`[Server] Room ${meetingId} occupancy: ${count}`);
+    };
+
     socket.on('join-room', (meetingId) => {
         console.log(`[Server] ${socket.id} joined room: ${meetingId}`);
         socket.join(meetingId);
+        updateRoomCount(meetingId);
 
         // Send any pending requests for this room to the newly joined client
         if (pendingRequests[meetingId] && pendingRequests[meetingId].length > 0) {
@@ -90,6 +98,17 @@ io.on('connection', (socket) => {
 
     socket.on('emoji-reaction', (data) => {
         io.to(data.meetingId).emit('emoji-reaction', data);
+    });
+
+    socket.on('disconnecting', () => {
+        // Update room counts before completely leaving
+        socket.rooms.forEach(room => {
+            if (room !== socket.id) {
+                // We can't use updateRoomCount here directly because socket hasn't left yet
+                // So we delay it slightly
+                setTimeout(() => updateRoomCount(room), 100);
+            }
+        });
     });
 
     socket.on('disconnect', (reason) => {

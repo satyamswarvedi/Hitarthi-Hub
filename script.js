@@ -84,8 +84,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const socket = io({
-        transports: ['websocket'],
-        upgrade: false
+        transports: ['polling', 'websocket'], // Start with polling for better compatibility
+        upgrade: true,
+        reconnection: true,
+        reconnectionAttempts: Infinity
     });
 
     socket.on('connect', () => {
@@ -99,8 +101,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // CRITICAL: Re-join room on every connection/reconnection
         if (meetingId) {
-            console.log(`[Socket] Re-joining room: ${meetingId}`);
-            socket.emit('join-room', meetingId);
+            const normalizedId = meetingId.toLowerCase().trim();
+            console.log(`[Socket] Re-joining room: ${normalizedId}`);
+            socket.emit('join-room', normalizedId);
         }
     });
 
@@ -157,6 +160,29 @@ document.addEventListener('DOMContentLoaded', () => {
         socket.off('participant-joined').on('participant-joined', (msg) => {
             spawnMockParticipants(0, msg.guestName || 'Guest');
             showToast(`${msg.guestName || 'Guest'} has joined!`);
+        });
+
+        // Listen for Room Occupancy (Total People in signaling room)
+        socket.off('room-occupancy').on('room-occupancy', (msg) => {
+            console.log('[Socket] Users Online in Signaling:', msg.count);
+            const dot = document.getElementById('socket-status-dot');
+            if (dot) {
+                dot.title = `Users Online: ${msg.count}`;
+                // Optionally show a badge or update text
+                const header = document.getElementById('meeting-id-header');
+                if (header) {
+                    let countLabel = document.getElementById('online-count-label');
+                    if (!countLabel) {
+                        countLabel = document.createElement('span');
+                        countLabel.id = 'online-count-label';
+                        countLabel.style.fontSize = '0.7rem';
+                        countLabel.style.marginLeft = '8px';
+                        countLabel.style.opacity = '0.7';
+                        header.appendChild(countLabel);
+                    }
+                    countLabel.innerText = `(${msg.count} online)`;
+                }
+            }
         });
     };
 
