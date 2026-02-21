@@ -29,36 +29,53 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// In-memory store for pending admission requests
+const pendingRequests = {};
+
 // Socket.io Signaling Logic
 io.on('connection', (socket) => {
     console.log(`[Server] New connection: ${socket.id}`);
 
     socket.on('join-room', (meetingId) => {
-        console.log(`[Server] ${socket.id} joining room: ${meetingId}`);
+        console.log(`[Server] ${socket.id} joined room: ${meetingId}`);
         socket.join(meetingId);
 
-        // Count users in room
-        const clients = io.sockets.adapter.rooms.get(meetingId);
-        const numClients = clients ? clients.size : 0;
-        console.log(`[Server] Room ${meetingId} now has ${numClients} clients`);
+        // Send any pending requests for this room to the newly joined client
+        if (pendingRequests[meetingId] && pendingRequests[meetingId].length > 0) {
+            console.log(`[Server] Sending ${pendingRequests[meetingId].length} pending requests to ${socket.id}`);
+            pendingRequests[meetingId].forEach(req => {
+                socket.emit('join-request', req);
+            });
+        }
     });
 
     socket.on('join-request', (data) => {
         const { meetingId, guestId, guestName } = data;
-        console.log(`[Server] Join request for ${meetingId} from ${guestName} (${socket.id})`);
-
-        // Use io.to() to ensure everyone in that room gets it. Host will filter.
-        io.to(meetingId).emit('join-request', {
+        const requestData = {
             guestId,
             guestName,
             socketId: socket.id,
-            meetingId
-        });
+            meetingId,
+            timestamp: Date.now()
+        };
+
+        console.log(`[Server] Storing request for ${meetingId} from ${guestName}`);
+
+        if (!pendingRequests[meetingId]) pendingRequests[meetingId] = [];
+        // Prevent duplicates from same guestId
+        pendingRequests[meetingId] = pendingRequests[meetingId].filter(r => r.guestId !== guestId);
+        pendingRequests[meetingId].push(requestData);
+
+        io.to(meetingId).emit('join-request', requestData);
     });
 
     socket.on('admission-decision', (data) => {
         const { meetingId, guestId, admitted, guestSocketId } = data;
-        console.log(`[Server] Adm decision for ${guestId} in ${meetingId}: ${admitted}`);
+        console.log(`[Server] Adm decision in ${meetingId} for ${guestId}: ${admitted}`);
+
+        if (pendingRequests[meetingId]) {
+            pendingRequests[meetingId] = pendingRequests[meetingId].filter(r => r.guestId !== guestId);
+        }
 
         io.to(guestSocketId).emit('admission-decision', { admitted, meetingId });
 
@@ -68,17 +85,19 @@ io.on('connection', (socket) => {
     });
 
     socket.on('chat-message', (data) => {
-        const { meetingId, sender, text } = data;
-        io.to(meetingId).emit('chat-message', { sender, text });
+        io.to(data.meetingId).emit('chat-message', data);
     });
 
     socket.on('emoji-reaction', (data) => {
-        const { meetingId, emoji, sender } = data;
-        io.to(meetingId).emit('emoji-reaction', { emoji, sender });
+        io.to(data.meetingId).emit('emoji-reaction', data);
     });
 
     socket.on('disconnect', (reason) => {
         console.log(`[Server] ${socket.id} disconnected: ${reason}`);
+        // Cleanup pending requests from disconnected sockets
+        for (let mId in pendingRequests) {
+            pendingRequests[mId] = pendingRequests[mId].filter(r => r.socketId !== socket.id);
+        }
     });
 });
 

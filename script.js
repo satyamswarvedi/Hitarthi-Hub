@@ -115,14 +115,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const setupSocket = (id) => {
         console.log(`[Socket] Setting up listeners for room: ${id}`);
-        // Ensure we are in the room
         socket.emit('join-room', id);
 
-        // Listen for JOIN_REQUEST (sent by io.to(meetingId))
+        // Update Role UI
+        const roleHeader = document.getElementById('meeting-id-header');
+        if (roleHeader && isHost) {
+            roleHeader.title = "You are the Host (👑)";
+            roleHeader.innerHTML += " <small style='color:var(--primary)'>(Host 👑)</small>";
+        }
+
+        // Listen for JOIN_REQUEST
         socket.off('join-request').on('join-request', (msg) => {
             console.log('[Socket] Incoming join request:', msg);
 
-            // IF I AM THE HOST, show the admission prompt
             if (isHost && msg.guestId !== guestId) {
                 console.log('[Host] Showing prompt for guest:', msg.guestName);
                 showToast(`Admission request: ${msg.guestName}`);
@@ -296,7 +301,10 @@ document.addEventListener('DOMContentLoaded', () => {
         setupSocket(meetingId);
 
         const nameTag = document.querySelector('.name-tag');
-        if (nameTag) nameTag.innerText = asHost ? "You (Host)" : currentUserName;
+        if (nameTag) {
+            nameTag.innerText = asHost ? "You (Host 👑)" : currentUserName;
+            if (asHost) nameTag.style.color = "var(--primary)";
+        }
 
         // Start camera in background without blocking signaling
         initCamera();
