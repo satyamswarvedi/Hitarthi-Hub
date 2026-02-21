@@ -988,3 +988,8 @@ body {
 
 .notification-toast { z-index: 99999 !important; top: 40px !important; }
 .btn { pointer-events: auto !important; }
+
+/* Status Dot for signaling connection */
+.status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); border: 2px solid rgba(255, 255, 255, 0.2); margin-right: 5px; }
+.status-dot.connected { background-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.5); transform: scale(1.1); }
+.status-dot.disconnected { background-color: #ef4444; box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); animation: pulse 1.5s infinite; }

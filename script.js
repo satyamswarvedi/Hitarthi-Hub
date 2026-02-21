@@ -90,16 +90,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('connect', () => {
         console.log('[Socket] Connected!', socket.id);
+        const dot = document.getElementById('socket-status-dot');
+        if (dot) {
+            dot.classList.remove('disconnected');
+            dot.classList.add('connected');
+        }
         showToast("Connected to server ✅");
+
+        // CRITICAL: Re-join room on every connection/reconnection
+        if (meetingId) {
+            console.log(`[Socket] Re-joining room: ${meetingId}`);
+            socket.emit('join-room', meetingId);
+        }
     });
 
-    socket.on('connect_error', (err) => {
-        console.error('[Socket] Connection error:', err);
-        showToast("Connection error. Retrying...");
+    socket.on('disconnect', () => {
+        console.log('[Socket] Disconnected.');
+        const dot = document.getElementById('socket-status-dot');
+        if (dot) {
+            dot.classList.remove('connected');
+            dot.classList.add('disconnected');
+        }
     });
 
     const setupSocket = (id) => {
-        console.log(`[Socket] Joining room: ${id}`);
+        console.log(`[Socket] Setting up listeners for room: ${id}`);
+        // Ensure we are in the room
         socket.emit('join-room', id);
 
         // Listen for JOIN_REQUEST (sent by io.to(meetingId))
