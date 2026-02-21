@@ -75,70 +75,76 @@ document.addEventListener('DOMContentLoaded', () => {
     let isMeetingLocked = false;
 
     // ============================================================
-    // BROADCAST CHANNEL - For same-browser cross-tab communication
+    // SOCKET.IO - For real-time signaling across devices
     // ============================================================
-    let hostChannel = null;   // Host listens on this
-    let guestChannel = null;  // Guest sends on this
+    const socket = io(); // Connect to the server
 
-    const setupHostChannel = (id) => {
-        // Host listens for join requests on channel named after the meeting
-        hostChannel = new BroadcastChannel(`meet_${id}`);
-        hostChannel.onmessage = (event) => {
-            const msg = event.data;
-            console.log('[Host] Received message:', msg);
-            if (msg.type === 'JOIN_REQUEST') {
-                showAdmissionPrompt(msg.guestId, msg.guestName);
-            }
-        };
-        console.log(`[Host] Listening on channel: meet_${id}`);
-    };
+    const setupSocket = (id) => {
+        console.log(`[Socket] Joining room: ${id}`);
+        socket.emit('join-room', id);
 
-    const setupGuestChannel = (id) => {
-        // Guest sends to the host channel and listens for responses on their own channel
-        guestChannel = new BroadcastChannel(`meet_${id}`);
-        guestChannel.onmessage = (event) => {
-            const msg = event.data;
-            console.log('[Guest] Received message:', msg);
-            if (msg.type === 'ADMIT' && msg.guestId === guestId) {
+        // Host listeners
+        socket.off('join-request').on('join-request', (msg) => {
+            console.log('[Host] Received join request:', msg);
+            showAdmissionPrompt(msg.guestId, msg.guestName, msg.socketId);
+        });
+
+        // Guest listeners
+        socket.off('admission-decision').on('admission-decision', (msg) => {
+            console.log('[Guest] Received admission decision:', msg);
+            if (msg.admitted) {
                 console.log('[Guest] Admitted!');
                 enterMeetingRoom();
-            } else if (msg.type === 'DENY' && msg.guestId === guestId) {
+            } else {
                 console.log('[Guest] Denied.');
                 showToast("Host denied your request.");
                 setTimeout(() => {
                     window.location.href = window.location.href.split('?')[0];
                 }, 2000);
             }
-        };
-        console.log(`[Guest] Connected to channel: meet_${id}`);
+        });
+
+        // Common listeners (Chat/Emojis)
+        socket.off('chat-message').on('chat-message', (msg) => {
+            addMessage(msg.sender, msg.text);
+        });
+
+        socket.off('emoji-reaction').on('emoji-reaction', (msg) => {
+            // Optional: show flying emojis or something
+            console.log(`Emoji from ${msg.sender}: ${msg.emoji}`);
+        });
+
+        socket.off('participant-joined').on('participant-joined', (msg) => {
+            spawnMockParticipants(0, msg.guestName || 'Guest');
+            showToast(`${msg.guestName || 'Guest'} has joined!`);
+        });
     };
 
     // ============================================================
     // ADMISSION PROMPT (shown to host)
     // ============================================================
-    const showAdmissionPrompt = (gId, gName) => {
-        if (admissionNotification.classList.contains('active')) return; // Already showing one
+    const showAdmissionPrompt = (gId, gName, gSocketId) => {
+        if (admissionNotification.classList.contains('active')) return;
 
         console.log(`[Host] Showing admission prompt for: ${gName} (${gId})`);
         admissionMessage.innerText = `${gName} wants to join`;
         admissionNotification.classList.add('active');
 
-        // Set button handlers with closure capturing gId
-        admitBtn.onclick = () => handleAdmission(true, gId, gName);
-        denyBtn.onclick = () => handleAdmission(false, gId, gName);
+        admitBtn.onclick = () => handleAdmission(true, gId, gName, gSocketId);
+        denyBtn.onclick = () => handleAdmission(false, gId, gName, gSocketId);
     };
 
-    const handleAdmission = (admit, targetGuestId, guestName) => {
+    const handleAdmission = (admit, targetGuestId, guestName, targetGuestSocketId) => {
         console.log(`[Host] Decision for ${targetGuestId}: ${admit ? 'ADMIT' : 'DENY'}`);
         admissionNotification.classList.remove('active');
 
-        // Send decision via BroadcastChannel
-        if (hostChannel) {
-            hostChannel.postMessage({
-                type: admit ? 'ADMIT' : 'DENY',
-                guestId: targetGuestId
-            });
-        }
+        // Send decision via Socket.io
+        socket.emit('admission-decision', {
+            meetingId: meetingId,
+            guestId: targetGuestId,
+            admitted: admit,
+            guestSocketId: targetGuestSocketId
+        });
 
         if (admit) {
             spawnMockParticipants(0, guestName || 'Guest');
@@ -177,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     guestId = 'g_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
                     window.MeetApp.guestId = guestId;
                     console.log(`[Guest] My guestId: ${guestId}`);
-                    setupGuestChannel(meetingId);
+                    setupSocket(meetingId);
                     showPage(nameEntryPage);
                 } else {
                     showPage(landingPage);
@@ -250,7 +256,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateControlButtons();
 
         if (asHost) {
-            setupHostChannel(meetingId);
+            setupSocket(meetingId);
             console.log('[Host] Meeting started, waiting for guests...');
         }
     };
@@ -262,19 +268,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         console.log(`[Guest] Requesting admission as "${currentUserName}" (${guestId}) for room ${meetingId}`);
 
-        // Send join request via BroadcastChannel
-        if (guestChannel) {
-            guestChannel.postMessage({
-                type: 'JOIN_REQUEST',
-                guestId: guestId,
-                guestName: currentUserName,
-                meetingId: meetingId
-            });
-            showToast("Join request sent! Waiting for host...");
-        } else {
-            console.error('[Guest] No channel available! meetingId:', meetingId);
-            showToast("Error: Could not connect to meeting channel.");
-        }
+        // Send join request via Socket.io
+        socket.emit('join-request', {
+            meetingId: meetingId,
+            guestId: guestId,
+            guestName: currentUserName
+        });
+        showToast("Join request sent! Waiting for host...");
     };
 
     const enterMeetingRoom = () => {
@@ -363,8 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (leaveBtn) {
         leaveBtn.addEventListener('click', () => {
             if (localStream) localStream.getTracks().forEach(t => t.stop());
-            if (hostChannel) hostChannel.close();
-            if (guestChannel) guestChannel.close();
+            socket.disconnect();
             window.location.href = window.location.href.split('?')[0];
         });
     }
@@ -484,6 +483,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = chatInput ? chatInput.value.trim() : '';
         if (text) {
             addMessage(currentUserName, text);
+            // Broadcast to others via socket
+            socket.emit('chat-message', {
+                meetingId: meetingId,
+                sender: currentUserName,
+                text: text
+            });
             if (chatInput) chatInput.value = '';
             emojiPanel.classList.remove('active');
         }
