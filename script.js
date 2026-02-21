@@ -77,7 +77,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // ============================================================
     // SOCKET.IO - For real-time signaling across devices
     // ============================================================
-    const socket = io(); // Connect to the server
+    if (typeof io === 'undefined') {
+        console.error('Socket.io client not loaded!');
+        alert('CRITICAL: Socket.io failed to load. Please check your internet or reload.');
+        return;
+    }
+
+    const socket = io({
+        transports: ['websocket'],
+        upgrade: false
+    });
+
+    socket.on('connect', () => {
+        console.log('[Socket] Connected!', socket.id);
+        showToast("Connected to server ✅");
+    });
+
+    socket.on('connect_error', (err) => {
+        console.error('[Socket] Connection error:', err);
+        showToast("Connection error. Retrying...");
+    });
 
     const setupSocket = (id) => {
         console.log(`[Socket] Joining room: ${id}`);
@@ -106,15 +125,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Common listeners (Chat/Emojis)
         socket.off('chat-message').on('chat-message', (msg) => {
+            console.log('[Socket] Chat message received:', msg);
             addMessage(msg.sender, msg.text);
         });
 
         socket.off('emoji-reaction').on('emoji-reaction', (msg) => {
-            // Optional: show flying emojis or something
             console.log(`Emoji from ${msg.sender}: ${msg.emoji}`);
         });
 
         socket.off('participant-joined').on('participant-joined', (msg) => {
+            console.log('[Socket] Participant joined room:', msg);
             spawnMockParticipants(0, msg.guestName || 'Guest');
             showToast(`${msg.guestName || 'Guest'} has joined!`);
         });
