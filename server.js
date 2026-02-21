@@ -29,93 +29,110 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// In-memory store for pending admission requests
-const pendingRequests = {};
+// In-memory store for meeting rooms
+const activeMeetings = {};
 
-// Socket.io Signaling Logic
 io.on('connection', (socket) => {
-    console.log(`[Server] New connection: ${socket.id}`);
+    console.log(`[Server] Connection: ${socket.id}`);
 
-    const updateRoomCount = (meetingId) => {
-        const clients = io.sockets.adapter.rooms.get(meetingId);
+    const broadcastOccupancy = (mid) => {
+        const clients = io.sockets.adapter.rooms.get(mid);
         const count = clients ? clients.size : 0;
-        io.to(meetingId).emit('room-occupancy', { count });
-        console.log(`[Server] Room ${meetingId} occupancy: ${count}`);
+        io.to(mid).emit('room-occupancy', { count });
+        console.log(`[Server] Room ${mid} occupancy: ${count}`);
     };
 
     socket.on('join-room', (meetingId) => {
-        console.log(`[Server] ${socket.id} joined room: ${meetingId}`);
-        socket.join(meetingId);
-        updateRoomCount(meetingId);
+        const mid = meetingId.toLowerCase().trim();
+        socket.join(mid);
+        console.log(`[Server] ${socket.id} joined room: ${mid}`);
 
-        // Send any pending requests for this room to the newly joined client
-        if (pendingRequests[meetingId] && pendingRequests[meetingId].length > 0) {
-            console.log(`[Server] Sending ${pendingRequests[meetingId].length} pending requests to ${socket.id}`);
-            pendingRequests[meetingId].forEach(req => {
-                socket.emit('join-request', req);
+        if (!activeMeetings[mid]) {
+            activeMeetings[mid] = { pendingGuests: [] };
+        }
+
+        // Send all current pending requests to the newly joined socket (e.g. Host)
+        if (activeMeetings[mid].pendingGuests.length > 0) {
+            console.log(`[Server] Syncing ${activeMeetings[mid].pendingGuests.length} requests to ${socket.id}`);
+            activeMeetings[mid].pendingGuests.forEach(guest => {
+                socket.emit('join-request', guest);
             });
         }
+
+        broadcastOccupancy(mid);
     });
 
     socket.on('join-request', (data) => {
         const { meetingId, guestId, guestName } = data;
+        const mid = meetingId.toLowerCase().trim();
+
         const requestData = {
             guestId,
             guestName,
             socketId: socket.id,
-            meetingId,
+            meetingId: mid,
             timestamp: Date.now()
         };
 
-        console.log(`[Server] Storing request for ${meetingId} from ${guestName}`);
+        if (!activeMeetings[mid]) activeMeetings[mid] = { pendingGuests: [] };
 
-        if (!pendingRequests[meetingId]) pendingRequests[meetingId] = [];
-        // Prevent duplicates from same guestId
-        pendingRequests[meetingId] = pendingRequests[meetingId].filter(r => r.guestId !== guestId);
-        pendingRequests[meetingId].push(requestData);
+        // Remove existing from same person and update
+        activeMeetings[mid].pendingGuests = activeMeetings[mid].pendingGuests.filter(g => g.guestId !== guestId);
+        activeMeetings[mid].pendingGuests.push(requestData);
 
-        io.to(meetingId).emit('join-request', requestData);
+        console.log(`[Server] Join request logged for ${mid} from ${guestName}`);
+
+        // Broadcast to everyone in room. Host will pick it up.
+        io.to(mid).emit('join-request', requestData);
     });
 
     socket.on('admission-decision', (data) => {
-        const { meetingId, guestId, admitted, guestSocketId } = data;
-        console.log(`[Server] Adm decision in ${meetingId} for ${guestId}: ${admitted}`);
+        const { meetingId, guestId, admitted } = data;
+        const mid = meetingId.toLowerCase().trim();
 
-        if (pendingRequests[meetingId]) {
-            pendingRequests[meetingId] = pendingRequests[meetingId].filter(r => r.guestId !== guestId);
+        console.log(`[Server] Admission in ${mid}: ${admitted ? 'ADMIT' : 'DENY'} for ${guestId}`);
+
+        // Cleanup pending store
+        if (activeMeetings[mid]) {
+            activeMeetings[mid].pendingGuests = activeMeetings[mid].pendingGuests.filter(g => g.guestId !== guestId);
         }
 
-        io.to(guestSocketId).emit('admission-decision', { admitted, meetingId });
+        // CRITICAL: Broadcast to the whole room. Guest filters by guestId.
+        // This solves the "stale socket ID" problem.
+        io.to(mid).emit('admission-decision', {
+            guestId,
+            admitted,
+            meetingId: mid
+        });
 
         if (admitted) {
-            io.to(meetingId).emit('participant-joined', { guestId, guestName: "Guest" });
+            io.to(mid).emit('participant-joined', { guestId, guestName: "User" });
         }
     });
 
     socket.on('chat-message', (data) => {
-        io.to(data.meetingId).emit('chat-message', data);
+        const mid = data.meetingId.toLowerCase().trim();
+        io.to(mid).emit('chat-message', data);
     });
 
     socket.on('emoji-reaction', (data) => {
-        io.to(data.meetingId).emit('emoji-reaction', data);
+        const mid = data.meetingId.toLowerCase().trim();
+        io.to(mid).emit('emoji-reaction', data);
     });
 
     socket.on('disconnecting', () => {
-        // Update room counts before completely leaving
         socket.rooms.forEach(room => {
             if (room !== socket.id) {
-                // We can't use updateRoomCount here directly because socket hasn't left yet
-                // So we delay it slightly
-                setTimeout(() => updateRoomCount(room), 100);
+                setTimeout(() => broadcastOccupancy(room), 200);
             }
         });
     });
 
     socket.on('disconnect', (reason) => {
-        console.log(`[Server] ${socket.id} disconnected: ${reason}`);
-        // Cleanup pending requests from disconnected sockets
-        for (let mId in pendingRequests) {
-            pendingRequests[mId] = pendingRequests[mId].filter(r => r.socketId !== socket.id);
+        console.log(`[Server] Disconnected: ${socket.id} (${reason})`);
+        // Clean up pending requests from this socket
+        for (let mid in activeMeetings) {
+            activeMeetings[mid].pendingGuests = activeMeetings[mid].pendingGuests.filter(g => g.socketId !== socket.id);
         }
     });
 });

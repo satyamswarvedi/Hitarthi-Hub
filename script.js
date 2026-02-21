@@ -138,17 +138,21 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Listen for ADMISSION_DECISION
+        // Listen for ADMISSION_DECISION (Broadcast to room)
         socket.off('admission-decision').on('admission-decision', (msg) => {
             console.log('[Socket] Incoming admission decision:', msg);
-            if (msg.admitted) {
-                showToast("Admitted! Joining meeting...");
-                enterMeetingRoom();
-            } else {
-                showToast("Host denied admission.");
-                setTimeout(() => {
-                    window.location.href = window.location.href.split('?')[0];
-                }, 2000);
+
+            // Check if this decision is for ME (if I am a guest)
+            if (!isHost && msg.guestId === guestId) {
+                if (msg.admitted) {
+                    showToast("Admitted! Joining meeting...");
+                    enterMeetingRoom();
+                } else {
+                    showToast("Host denied admission.");
+                    setTimeout(() => {
+                        window.location.href = window.location.href.split('?')[0];
+                    }, 2000);
+                }
             }
         });
 
@@ -258,12 +262,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     isHost = true;
                     window.MeetApp.isHost = true;
+                    showToast("Verified: You are the Host 👑");
                     startMeeting(true);
                 } else {
                     console.log("[Role] Identified as GUEST");
                     isHost = false;
+                    window.MeetApp.isHost = false;
                     guestId = 'g_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
                     window.MeetApp.guestId = guestId;
+
+                    showToast("Verified: You are a Guest 👋");
 
                     // Clean URL if it has role=guest
                     if (urlRole === 'guest') {
