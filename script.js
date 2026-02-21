@@ -232,7 +232,6 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const urlParams = new URLSearchParams(window.location.search);
             const urlMeetingId = urlParams.get('id');
-            const role = urlParams.get('role');
 
             updateTime();
             setInterval(updateTime, 1000);
@@ -241,29 +240,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 meetingId = urlMeetingId.toLowerCase().trim();
                 updateMeetingIdUI(meetingId);
                 window.MeetApp.meetingId = meetingId;
-
                 if (meetingCodeInput) meetingCodeInput.value = meetingId;
 
-                if (role === 'host') {
+                // CHECK ROLE: Is this tab the host of this specific meeting?
+                const storedHost = sessionStorage.getItem(`host_of_${meetingId}`);
+
+                // For backward compatibility or direct links:
+                const urlRole = urlParams.get('role');
+
+                if (storedHost === 'true' || urlRole === 'host') {
+                    console.log("[Role] Identified as HOST");
+                    if (urlRole === 'host') {
+                        // Persist it and clean URL
+                        sessionStorage.setItem(`host_of_${meetingId}`, 'true');
+                        const cleanUrl = `${window.location.protocol}//${window.location.host}${window.location.pathname}?id=${meetingId}`;
+                        window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
+                    }
                     isHost = true;
                     window.MeetApp.isHost = true;
                     startMeeting(true);
-                } else if (role === 'guest') {
+                } else {
+                    console.log("[Role] Identified as GUEST");
                     isHost = false;
-                    // Generate a unique guestId for this session
                     guestId = 'g_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
                     window.MeetApp.guestId = guestId;
-                    console.log(`[Guest] My guestId: ${guestId}`);
+
+                    // Clean URL if it has role=guest
+                    if (urlRole === 'guest') {
+                        const cleanUrl = `${window.location.protocol}//${window.location.host}${window.location.pathname}?id=${meetingId}`;
+                        window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
+                    }
+
                     setupSocket(meetingId);
                     showPage(nameEntryPage);
-                } else {
-                    showPage(landingPage);
                 }
             } else {
                 showPage(landingPage);
             }
         } catch (err) {
             console.error("Initialization error:", err);
+            showPage(landingPage);
         }
     };
 
@@ -289,8 +305,12 @@ document.addEventListener('DOMContentLoaded', () => {
         meetingId = generateMeetingId();
         window.MeetApp.meetingId = meetingId;
 
+        // Persist host role for this specific meeting in this session
+        sessionStorage.setItem(`host_of_${meetingId}`, 'true');
+
         try {
-            const newUrl = `${window.location.href.split('?')[0]}?id=${meetingId}&role=host`;
+            // Clean URL (no role=host)
+            const newUrl = `${window.location.href.split('?')[0]}?id=${meetingId}`;
             window.history.pushState({ path: newUrl }, '', newUrl);
         } catch (e) {
             console.warn("pushState failed:", e);
@@ -316,7 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const base = window.location.href.split('?')[0];
-        window.location.href = `${base}?id=${id}&role=guest`;
+        window.location.href = `${base}?id=${id}`;
     };
 
     const startMeeting = async (asHost) => {
