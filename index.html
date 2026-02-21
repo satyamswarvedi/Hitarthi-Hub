@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meet - Premium Video Conferencing</title>
+    <link rel="stylesheet" href="index.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <!-- Landing Page -->
+    <div id="landing-page" class="page active">
+        <div class="landing-content">
+            <div class="logo-container">
+                <h1 class="logo-text">Meet</h1>
+                <div class="logo-badge">Premium</div>
+            </div>
+            <p class="tagline">Secure, high-quality video meetings for everyone.</p>
+            <div class="action-buttons-container">
+                <div class="action-buttons">
+                    <button id="new-meeting-btn" class="btn primary">
+                        <i class="fas fa-video"></i> Create New Meeting
+                    </button>
+                    <div class="join-container">
+                        <i class="fas fa-keyboard" style="margin-left: 1rem; color: var(--text-sub);"></i>
+                        <input type="text" id="meeting-code" placeholder="Enter code or link">
+                        <button id="join-btn" class="btn secondary">Join</button>
+                    </div>
+                </div>
+            </div>
+            <div id="phone-link-helper" class="local-network-tip glass-panel">
+                <p style="font-size: 0.85rem; color: var(--text-main); font-weight: 500;">📱 Join from your phone</p>
+                <p style="font-size: 0.75rem; color: var(--text-sub); margin-bottom: 0.8rem;">Enter your PC's IP address
+                    to sync devices.</p>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="text" id="pc-ip-input" placeholder="e.g. 192.168.1.5"
+                        style="font-size: 0.8rem; padding: 0.6rem 1rem; border-radius: 8px; border: 1px solid var(--glass-border); background: rgba(0,0,0,0.2); color: #fff; flex: 1;">
+                    <button id="set-ip-btn" class="btn primary btn-sm"
+                        style="white-space: nowrap; padding: 0.6rem 1rem; font-size: 0.8rem;">Set IP</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Name Entry Page -->
+    <div id="name-entry-page" class="page">
+        <div class="landing-content">
+            <h1 class="logo-text">Join Meeting</h1>
+            <p class="tagline">Enter your name to join the conversation.</p>
+            <div class="action-buttons">
+                <div class="join-container">
+                    <input type="text" id="user-name-input" placeholder="Your Name">
+                    <button id="request-join-btn" class="btn primary">Join</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Waiting Room -->
+    <div id="waiting-room" class="page">
+        <div class="landing-content">
+            <div class="loader-container">
+                <div class="loader"></div>
+            </div>
+            <h1 class="logo-text">Waiting Room</h1>
+            <p class="tagline">The host will let you in soon...</p>
+        </div>
+    </div>
+
+    <!-- Host Admission Notification -->
+    <div id="admission-notification" class="notification-toast">
+        <div class="notification-content">
+            <span id="admission-message">Guest wants to join</span>
+            <div class="notification-actions">
+                <button id="admit-btn" class="btn primary btn-sm">Admit</button>
+                <button id="deny-btn" class="btn danger btn-sm">Deny</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Meeting Room -->
+    <div id="meeting-room" class="page">
+        <header class="room-header">
+            <div class="room-info">
+                <span id="meeting-id-header" class="copyable" title="Click to copy">abc-defg-hij</span>
+                <span class="divider">|</span>
+                <span id="time-display">12:30 PM</span>
+            </div>
+            <button id="header-copy-link" class="btn primary">
+                <i class="fas fa-link"></i> Copy Meeting Link
+            </button>
+        </header>
+
+        <main class="meeting-container">
+            <div class="video-grid-wrapper">
+                <div id="video-grid" class="video-grid">
+                    <div class="video-card self" id="local-video-container">
+                        <video id="local-video" autoplay muted playsinline></video>
+                        <div class="name-tag">You (Host)</div>
+                        <div class="hand-indicator"><i class="fas fa-hand-paper"></i></div>
+                    </div>
+                </div>
+            </div>
+
+            <aside id="chat-sidebar" class="sidebar">
+                <div class="sidebar-tabs">
+                    <button id="chat-tab" class="tab-btn active" data-tab="chat-content">
+                        <i class="fas fa-comment-alt"></i> Chat
+                    </button>
+                    <button id="participants-tab" class="tab-btn" data-tab="participants-content">
+                        <i class="fas fa-users"></i> Participants (<span id="participant-count">1</span>)
+                    </button>
+                    <button id="info-tab" class="tab-btn" data-tab="info-content">
+                        <i class="fas fa-info-circle"></i> Info
+                    </button>
+                </div>
+                <button id="close-chat" class="icon-btn"><i class="fas fa-times"></i></button>
+
+                <div id="chat-content" class="sidebar-pane active">
+                    <div id="chat-messages" class="chat-messages">
+                        <!-- Messages will appear here -->
+                    </div>
+                    <div class="chat-input-area">
+                        <div id="emoji-panel" class="emoji-panel">
+                            <div class="emoji-cat">Standard</div>
+                            <div class="emoji-grid">
+                                <span class="emoji-btn">😀</span><span class="emoji-btn">😂</span><span
+                                    class="emoji-btn">😍</span><span class="emoji-btn">🤔</span>
+                                <span class="emoji-btn">👍</span><span class="emoji-btn">🙌</span><span
+                                    class="emoji-btn">🎉</span><span class="emoji-btn">🔥</span>
+                            </div>
+                            <div class="emoji-cat">Dance & Party</div>
+                            <div class="emoji-grid">
+                                <span class="emoji-btn dance" title="Dance!">💃</span>
+                                <span class="emoji-btn dance" title="Groove!">🕺</span>
+                                <span class="emoji-btn pulse" title="Celebrate!">🎊</span>
+                                <span class="emoji-btn shake" title="Party!">🥳</span>
+                            </div>
+                        </div>
+                        <div class="input-wrapper">
+                            <button id="emoji-toggle" class="icon-btn"><i class="far fa-smile"></i></button>
+                            <input type="text" id="chat-input" placeholder="Send a message">
+                            <button id="send-msg-btn" class="icon-btn primary"><i
+                                    class="fas fa-paper-plane"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="participants-content" class="sidebar-pane">
+                    <div id="participants-list" class="participants-list">
+                        <div class="participant-item">
+                            <div class="avatar">Y</div>
+                            <div class="p-name">You (Host)</div>
+                            <div class="p-controls">
+                                <i class="fas fa-microphone"></i>
+                                <i class="fas fa-video"></i>
+                            </div>
+                        </div>
+                        <!-- Mock participants will be injected here -->
+                    </div>
+                </div>
+
+                <div id="info-content" class="sidebar-pane">
+                    <div class="info-section">
+                        <h3>Meeting Details</h3>
+                        <p class="info-label">Joining Link:</p>
+                        <div class="full-link-container">
+                            <input type="text" id="full-meeting-link" readonly
+                                value="https://antigravity-meet.web.app/join?id=abc-defg-hij">
+                            <button id="sidebar-copy-btn" class="icon-btn primary" title="Copy Link"><i
+                                    class="fas fa-copy"></i></button>
+                        </div>
+                        <p class="info-tip">Share this link with others to invite them to the meeting.</p>
+                        <hr class="menu-divider">
+                        <p class="info-label">Meeting ID:</p>
+                        <p id="sidebar-meeting-id" class="info-value">abc-defg-hij</p>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <footer class="toolbar">
+            <div class="left-controls">
+                <span id="room-time">12:30 PM</span>
+                <span class="divider">|</span>
+                <span id="meeting-id-footer" class="meeting-id-link">abc-defg-hij</span>
+            </div>
+            <div class="center-controls">
+                <button id="mic-btn" class="control-btn" title="Toggle Microphone">
+                    <i class="fas fa-microphone"></i>
+                </button>
+                <button id="camera-btn" class="control-btn" title="Toggle Camera">
+                    <i class="fas fa-video"></i>
+                </button>
+                <button id="screen-share-btn" class="control-btn" title="Share Screen">
+                    <i class="fas fa-desktop"></i>
+                </button>
+                <button id="more-options-btn" class="control-btn" title="More Options">
+                    <i class="fas fa-ellipsis"></i>
+                </button>
+            </div>
+            <div class="right-controls">
+                <button id="leave-btn" class="control-btn danger" title="Leave Meeting">
+                    <i class="fas fa-phone-slash"></i>
+                </button>
+            </div>
+
+            <div id="more-menu" class="dropdown-menu">
+                <div class="menu-item" id="menu-hand-raise"><i class="fas fa-hand-paper"></i> Raise Hand</div>
+                <div class="menu-item" id="menu-chat"><i class="fas fa-comment-alt"></i> Chat</div>
+                <div class="menu-item" id="menu-emojis"><i class="far fa-smile"></i> Emojis</div>
+                <div class="menu-item" id="menu-lock"><i class="fas fa-lock"></i> Lock Meeting</div>
+                <hr class="menu-divider">
+                <div class="menu-item" id="menu-participants"><i class="fas fa-users"></i> Participants</div>
+                <div class="menu-item"><i class="fas fa-cog"></i> Settings</div>
+            </div>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
