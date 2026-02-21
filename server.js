@@ -31,41 +31,54 @@ app.get('*', (req, res) => {
 
 // Socket.io Signaling Logic
 io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
+    console.log(`[Server] New connection: ${socket.id}`);
 
     socket.on('join-room', (meetingId) => {
+        console.log(`[Server] ${socket.id} joining room: ${meetingId}`);
         socket.join(meetingId);
-        console.log(`Socket ${socket.id} joined room ${meetingId}`);
+
+        // Count users in room
+        const clients = io.sockets.adapter.rooms.get(meetingId);
+        const numClients = clients ? clients.size : 0;
+        console.log(`[Server] Room ${meetingId} now has ${numClients} clients`);
     });
 
-    socket.on('join-request', ({ meetingId, guestId, guestName }) => {
-        console.log(`Join request from ${guestName} (${guestId}) for room ${meetingId}`);
-        // Broadcast join request to the host in that room
-        socket.to(meetingId).emit('join-request', { guestId, guestName, socketId: socket.id });
+    socket.on('join-request', (data) => {
+        const { meetingId, guestId, guestName } = data;
+        console.log(`[Server] Join request for ${meetingId} from ${guestName} (${socket.id})`);
+
+        // Use io.to() to ensure everyone in that room gets it. Host will filter.
+        io.to(meetingId).emit('join-request', {
+            guestId,
+            guestName,
+            socketId: socket.id,
+            meetingId
+        });
     });
 
-    socket.on('admission-decision', ({ meetingId, guestId, admitted, guestSocketId }) => {
-        console.log(`Admission decision for ${guestId} in room ${meetingId}: ${admitted}`);
-        // Send decision back to the specific guest
-        io.to(guestSocketId).emit('admission-decision', { admitted });
+    socket.on('admission-decision', (data) => {
+        const { meetingId, guestId, admitted, guestSocketId } = data;
+        console.log(`[Server] Adm decision for ${guestId} in ${meetingId}: ${admitted}`);
+
+        io.to(guestSocketId).emit('admission-decision', { admitted, meetingId });
 
         if (admitted) {
-            // Notify others in the room that someone joined
-            socket.to(meetingId).emit('participant-joined', { guestId, guestName: "Guest" });
+            io.to(meetingId).emit('participant-joined', { guestId, guestName: "Guest" });
         }
     });
 
-    socket.on('chat-message', ({ meetingId, sender, text }) => {
-        console.log(`Chat message in room ${meetingId} from ${sender}: ${text}`);
-        socket.to(meetingId).emit('chat-message', { sender, text });
+    socket.on('chat-message', (data) => {
+        const { meetingId, sender, text } = data;
+        io.to(meetingId).emit('chat-message', { sender, text });
     });
 
-    socket.on('emoji-reaction', ({ meetingId, emoji, sender }) => {
-        socket.to(meetingId).emit('emoji-reaction', { emoji, sender });
+    socket.on('emoji-reaction', (data) => {
+        const { meetingId, emoji, sender } = data;
+        io.to(meetingId).emit('emoji-reaction', { emoji, sender });
     });
 
-    socket.on('disconnect', () => {
-        console.log('User disconnected:', socket.id);
+    socket.on('disconnect', (reason) => {
+        console.log(`[Server] ${socket.id} disconnected: ${reason}`);
     });
 });
 

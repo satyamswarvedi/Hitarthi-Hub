@@ -102,39 +102,38 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`[Socket] Joining room: ${id}`);
         socket.emit('join-room', id);
 
-        // Host listeners
+        // Listen for JOIN_REQUEST (sent by io.to(meetingId))
         socket.off('join-request').on('join-request', (msg) => {
-            console.log('[Host] Received join request:', msg);
-            showAdmissionPrompt(msg.guestId, msg.guestName, msg.socketId);
+            console.log('[Socket] Incoming join request:', msg);
+
+            // IF I AM THE HOST, show the admission prompt
+            if (isHost && msg.guestId !== guestId) {
+                console.log('[Host] Showing prompt for guest:', msg.guestName);
+                showToast(`Admission request: ${msg.guestName}`);
+                showAdmissionPrompt(msg.guestId, msg.guestName, msg.socketId);
+            }
         });
 
-        // Guest listeners
+        // Listen for ADMISSION_DECISION
         socket.off('admission-decision').on('admission-decision', (msg) => {
-            console.log('[Guest] Received admission decision:', msg);
+            console.log('[Socket] Incoming admission decision:', msg);
             if (msg.admitted) {
-                console.log('[Guest] Admitted!');
+                showToast("Admitted! Joining meeting...");
                 enterMeetingRoom();
             } else {
-                console.log('[Guest] Denied.');
-                showToast("Host denied your request.");
+                showToast("Host denied admission.");
                 setTimeout(() => {
                     window.location.href = window.location.href.split('?')[0];
                 }, 2000);
             }
         });
 
-        // Common listeners (Chat/Emojis)
+        // Chat & Emojis
         socket.off('chat-message').on('chat-message', (msg) => {
-            console.log('[Socket] Chat message received:', msg);
             addMessage(msg.sender, msg.text);
         });
 
-        socket.off('emoji-reaction').on('emoji-reaction', (msg) => {
-            console.log(`Emoji from ${msg.sender}: ${msg.emoji}`);
-        });
-
         socket.off('participant-joined').on('participant-joined', (msg) => {
-            console.log('[Socket] Participant joined room:', msg);
             spawnMockParticipants(0, msg.guestName || 'Guest');
             showToast(`${msg.guestName || 'Guest'} has joined!`);
         });
@@ -144,11 +143,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // ADMISSION PROMPT (shown to host)
     // ============================================================
     const showAdmissionPrompt = (gId, gName, gSocketId) => {
-        if (admissionNotification.classList.contains('active')) return;
+        // Ensure element exists
+        const prompt = document.getElementById('admission-notification');
+        if (!prompt) {
+            console.error('Admission notification element not found!');
+            return;
+        }
 
-        console.log(`[Host] Showing admission prompt for: ${gName} (${gId})`);
+        console.log(`[Host] ACTIVATING prompt for: ${gName}`);
         admissionMessage.innerText = `${gName} wants to join`;
-        admissionNotification.classList.add('active');
+        prompt.classList.add('active');
 
         admitBtn.onclick = () => handleAdmission(true, gId, gName, gSocketId);
         denyBtn.onclick = () => handleAdmission(false, gId, gName, gSocketId);
