@@ -191,7 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setInterval(updateTime, 1000);
 
             if (urlMeetingId) {
-                meetingId = urlMeetingId;
+                meetingId = urlMeetingId.toLowerCase().trim();
                 updateMeetingIdUI(meetingId);
                 window.MeetApp.meetingId = meetingId;
 
@@ -273,15 +273,21 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const startMeeting = async (asHost) => {
+        console.log(`[Meeting] Starting room. asHost: ${asHost}, meetingId: ${meetingId}`);
         showPage(meetingRoom);
+
+        // ALWAYS setup socket FIRST so signaling is not blocked by camera/mic permission
+        setupSocket(meetingId);
+
         const nameTag = document.querySelector('.name-tag');
         if (nameTag) nameTag.innerText = asHost ? "You (Host)" : currentUserName;
-        await initCamera();
+
+        // Start camera in background without blocking signaling
+        initCamera();
         updateControlButtons();
 
         if (asHost) {
-            setupSocket(meetingId);
-            console.log('[Host] Meeting started, waiting for guests...');
+            console.log('[Host] Meeting ready. Signaling active.');
         }
     };
 
@@ -292,13 +298,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
         console.log(`[Guest] Requesting admission as "${currentUserName}" (${guestId}) for room ${meetingId}`);
 
-        // Send join request via Socket.io
-        socket.emit('join-request', {
-            meetingId: meetingId,
-            guestId: guestId,
-            guestName: currentUserName
-        });
+        const sendRequest = () => {
+            if (waitingRoom.classList.contains('active')) {
+                console.log('[Guest] Emitting join-request retry...');
+                socket.emit('join-request', {
+                    meetingId: meetingId,
+                    guestId: guestId,
+                    guestName: currentUserName
+                });
+            }
+        };
+
+        // Emit immediately
+        sendRequest();
         showToast("Join request sent! Waiting for host...");
+
+        // RETRY every 5 seconds if still in waiting room
+        const retryInterval = setInterval(() => {
+            if (!waitingRoom.classList.contains('active')) {
+                clearInterval(retryInterval);
+            } else {
+                sendRequest();
+            }
+        }, 5000);
     };
 
     const enterMeetingRoom = () => {
